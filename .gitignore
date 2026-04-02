@@ -1,0 +1,53 @@
+# Xcode
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+DerivedData/
+build/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# SPM
+.build/
+.swiftpm/
+Package.resolved
+
+# CocoaPods
+Pods/
+
+# macOS
+.DS_Store
+*.swp
+*~
+.Trashes
+._*
+
+# Gradle / Android
+.gradle/
+local.properties
+*.apk
+*.aab
+*.aar
+app/build/
+build/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Precompiled schemes (downloaded at runtime)
+*.pkp
+*.pkv
+
+# Secrets
+*.env
+*.p12
+*.mobileprovision
