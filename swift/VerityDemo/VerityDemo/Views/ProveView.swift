@@ -17,7 +17,6 @@ struct ProveView: View {
 
     @State private var service = VerityService()
     @ObservedObject private var downloader = SchemeDownloader.shared
-    @State private var isDownloading = false
 
     private var schemesDownloaded: Bool {
         downloader.isDownloaded(circuit)
@@ -39,29 +38,13 @@ struct ProveView: View {
                     currentPhase = nil
                 }
 
-                // Precompiled toggle + download
-                VStack(spacing: 12) {
+                // Precompiled toggle
+                VStack(spacing: 8) {
                     Toggle("Use Precompiled Schemes", isOn: $usePrecompiled)
                         .font(.subheadline)
                         .tint(.blue)
 
-                    if usePrecompiled && !schemesDownloaded {
-                        Button(action: downloadSchemes) {
-                            HStack(spacing: 8) {
-                                if isDownloading {
-                                    ProgressView()
-                                        .scaleEffect(0.8)
-                                } else {
-                                    Image(systemName: "arrow.down.circle")
-                                }
-                                Text(isDownloading ? "Downloading..." : "Download Precompiled Schemes")
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(.orange)
-                        .disabled(isDownloading)
-                    } else if usePrecompiled && schemesDownloaded {
+                    if usePrecompiled && schemesDownloaded {
                         HStack(spacing: 6) {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundStyle(.green)
@@ -85,7 +68,7 @@ struct ProveView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(isRunning || (usePrecompiled && !schemesDownloaded))
+                .disabled(isRunning)
 
                 // Live progress log
                 if !liveLog.isEmpty || (isRunning && currentPhase != nil) {
@@ -123,21 +106,16 @@ struct ProveView: View {
 
     private var buttonLabel: String {
         guard isRunning else { return "Generate Proof" }
-        guard let phase = currentPhase, phase != .done else { return "Starting..." }
-        return "\(phase.rawValue)..."
-    }
-
-    private func downloadSchemes() {
-        isDownloading = true
-        error = nil
-        Task {
-            do {
-                try await downloader.download(circuit)
-            } catch {
-                self.error = error.localizedDescription
+        if let phase = currentPhase {
+            switch phase {
+            case .done: return "Starting..."
+            default: return "\(phase.rawValue)..."
             }
-            isDownloading = false
         }
+        if usePrecompiled && !schemesDownloaded {
+            return "Downloading schemes..."
+        }
+        return "Starting..."
     }
 
     private func run() {
@@ -150,6 +128,11 @@ struct ProveView: View {
 
         runTask = Task {
             do {
+                // Download schemes if needed
+                if usePrecompiled && !schemesDownloaded {
+                    try await downloader.download(circuit)
+                }
+
                 if circuit.isFragmented {
                     let (steps, _, _, _) = try await service.generateAndVerifyFragmented(
                         circuit: circuit,
