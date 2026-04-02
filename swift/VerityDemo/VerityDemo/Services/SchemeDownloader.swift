@@ -14,7 +14,7 @@ final class SchemeDownloader: ObservableObject {
     ///
     /// Upload .pkp/.pkv files as GitHub Release assets, then set this to:
     ///   https://github.com/{owner}/{repo}/releases/download/{tag}
-    static let baseURL = "https://github.com/anthropics/sdk-examples/releases/download/schemes-v0.3.0"
+    static let baseURL = "https://github.com/atheonxyz/sdk-examples/releases/download/schemes-v0.3.0"
 
     // MARK: - Published State
 
