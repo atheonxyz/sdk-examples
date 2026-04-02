@@ -9,8 +9,8 @@ struct PhaseLogView: View {
             VStack(spacing: 10) {
                 ForEach(entries) { entry in
                     HStack(spacing: 8) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
+                        Image(systemName: iconName(for: entry.phase))
+                            .foregroundStyle(iconColor(for: entry.phase))
                             .font(.subheadline)
                         if let step = entry.stepName {
                             Text("\(step) — \(entry.phase.rawValue)")
@@ -39,6 +39,22 @@ struct PhaseLogView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func iconName(for phase: ProofPhase) -> String {
+        switch phase {
+        case .downloading: return "arrow.down.circle.fill"
+        case .cached: return "internaldrive.fill"
+        default: return "checkmark.circle.fill"
+        }
+    }
+
+    private func iconColor(for phase: ProofPhase) -> Color {
+        switch phase {
+        case .downloading: return .orange
+        case .cached: return .blue
+        default: return .green
         }
     }
 }

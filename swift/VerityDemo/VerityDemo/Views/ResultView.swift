@@ -28,13 +28,6 @@ struct ResultView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(result.backend.description)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(result.isValid ? Color.green.opacity(0.15) : Color.red.opacity(0.15))
-                    .clipShape(Capsule())
             }
         }
     }
@@ -44,8 +37,7 @@ struct ResultView: View {
     private var timingSection: some View {
         GroupBox("Timing") {
             VStack(spacing: 8) {
-                timingRow("Prepare", result.prepareTime,
-                          note: result.usedPrecompiled ? "pre-compiled" : nil)
+                timingRow("Load", result.loadTime)
                 timingRow("Prove", result.proveTime)
                 timingRow("Verify", result.verifyTime)
                 Divider()
@@ -94,15 +86,10 @@ struct ResultView: View {
 
     // MARK: - Row Helpers
 
-    private func timingRow(_ label: String, _ time: TimeInterval, note: String? = nil) -> some View {
+    private func timingRow(_ label: String, _ time: TimeInterval) -> some View {
         HStack {
             Text(label)
                 .foregroundStyle(.secondary)
-            if let note {
-                Text(note)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
             Spacer()
             Text(formatTime(time))
                 .font(.body.monospaced())

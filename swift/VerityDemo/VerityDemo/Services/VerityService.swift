@@ -13,62 +13,60 @@ actor VerityService {
         self.downloader = downloader
     }
 
+    /// Notify UI of a phase change and yield so MainActor can render before heavy work starts.
+    private func emitPhase(_ phase: ProofPhase, _ onPhase: PhaseCallback?) async {
+        onPhase?(phase)
+        await Task.yield()
+    }
+
     func generateAndVerify(
         circuit: DemoCircuit,
         backend: Backend,
-        usePrecompiled: Bool = true,
         onPhase: PhaseCallback? = nil,
         onPhaseComplete: PhaseLogCallback? = nil
     ) async throws -> ProofResult {
         let prefix = circuit.filePrefix
-        let circuitPath = try bundlePath("\(prefix)_circuit", ext: "json")
         let inputPath = try bundlePath("\(prefix)_Prover", ext: "toml")
 
         let verity = try Verity(backend: backend)
-        let circuitData = try Circuit.load(from: circuitPath)
         let witness = try Witness.load(from: inputPath)
 
         let memoryBefore = snapshot(backend: backend)
         var phases: [PhaseLogEntry] = []
 
-        // --- Prepare or Load ---
-        var prover: ProverScheme
-        var verifier: VerifierScheme
-        var usedPrecompiled = false
-        let prepareStart = CFAbsoluteTimeGetCurrent()
-
-        let pkpPath = await downloader.proverPath(for: prefix)
-        let pkvPath = await downloader.verifierPath(for: prefix)
-
-        if usePrecompiled,
-           backend == .provekit,
-           let pkpPath, let pkvPath {
-            onPhase?(.loading)
-            do {
-                prover = try verity.loadProver(from: pkpPath)
-                verifier = try verity.loadVerifier(from: pkvPath)
-                usedPrecompiled = true
-            } catch {
-                // Cached schemes may be stale — compile from scratch
-                onPhase?(.preparing)
-                let scheme = try verity.prepare(circuit: circuitData)
-                prover = scheme.prover
-                verifier = scheme.verifier
-            }
+        // --- Download or Cached ---
+        let wasCached = await downloader.isDownloaded(circuit)
+        if !wasCached {
+            await emitPhase(.downloading, onPhase)
+            let dlStart = CFAbsoluteTimeGetCurrent()
+            try await downloader.download(circuit)
+            let dlTime = CFAbsoluteTimeGetCurrent() - dlStart
+            let dlEntry = PhaseLogEntry(phase: .downloading, duration: dlTime, memoryAfter: snapshot(backend: backend))
+            phases.append(dlEntry)
+            onPhaseComplete?(dlEntry)
         } else {
-            onPhase?(.preparing)
-            let scheme = try verity.prepare(circuit: circuitData)
-            prover = scheme.prover
-            verifier = scheme.verifier
+            await emitPhase(.cached, onPhase)
+            let cachedEntry = PhaseLogEntry(phase: .cached, duration: 0, memoryAfter: snapshot(backend: backend))
+            phases.append(cachedEntry)
+            onPhaseComplete?(cachedEntry)
         }
-        let prepareTime = CFAbsoluteTimeGetCurrent() - prepareStart
-        let preparePhase: ProofPhase = usedPrecompiled ? .loading : .preparing
-        let prepareEntry = PhaseLogEntry(phase: preparePhase, duration: prepareTime, memoryAfter: snapshot(backend: backend))
-        phases.append(prepareEntry)
-        onPhaseComplete?(prepareEntry)
+
+        // --- Load ---
+        await emitPhase(.loading, onPhase)
+        let loadStart = CFAbsoluteTimeGetCurrent()
+        guard let pkpPath = await downloader.proverPath(for: prefix),
+              let pkvPath = await downloader.verifierPath(for: prefix) else {
+            throw VerityError.invalidInput("Scheme files not found for \(prefix)")
+        }
+        let prover = try verity.loadProver(from: pkpPath)
+        let verifier = try verity.loadVerifier(from: pkvPath)
+        let loadTime = CFAbsoluteTimeGetCurrent() - loadStart
+        let loadEntry = PhaseLogEntry(phase: .loading, duration: loadTime, memoryAfter: snapshot(backend: backend))
+        phases.append(loadEntry)
+        onPhaseComplete?(loadEntry)
 
         // --- Prove ---
-        onPhase?(.proving)
+        await emitPhase(.proving, onPhase)
         let proveStart = CFAbsoluteTimeGetCurrent()
         let proof: Proof
         do {
@@ -83,7 +81,7 @@ actor VerityService {
         onPhaseComplete?(proveEntry)
 
         // --- Verify ---
-        onPhase?(.verifying)
+        await emitPhase(.verifying, onPhase)
         let verifyStart = CFAbsoluteTimeGetCurrent()
         let isValid: Bool
         do {
@@ -102,9 +100,8 @@ actor VerityService {
         return ProofResult(
             circuit: circuit, backend: backend,
             proof: proof,
-            prepareTime: prepareTime, proveTime: proveTime, verifyTime: verifyTime,
+            loadTime: loadTime, proveTime: proveTime, verifyTime: verifyTime,
             isValid: isValid,
-            usedPrecompiled: usedPrecompiled,
             memoryBefore: memoryBefore,
             memoryAfter: snapshot(backend: backend),
             phases: phases
@@ -116,7 +113,6 @@ actor VerityService {
     func generateAndVerifyFragmented(
         circuit: DemoCircuit,
         backend: Backend,
-        usePrecompiled: Bool = true,
         onPhase: PhaseCallback? = nil,
         onPhaseComplete: PhaseLogCallback? = nil
     ) async throws -> (steps: [StepResult], phases: [PhaseLogEntry], memoryBefore: MemorySnapshot, memoryAfter: MemorySnapshot) {
@@ -129,49 +125,65 @@ actor VerityService {
         var stepResults: [StepResult] = []
         var phases: [PhaseLogEntry] = []
 
-        for (index, step) in stepNames.enumerated() {
-            // --- Load or Prepare ---
+        // --- Download or Cached ---
+        let wasCached = await downloader.isDownloaded(circuit)
+        if !wasCached {
+            await emitPhase(.downloading, onPhase)
+            let dlStart = CFAbsoluteTimeGetCurrent()
+            try await downloader.download(circuit)
+            let dlTime = CFAbsoluteTimeGetCurrent() - dlStart
+            let dlEntry = PhaseLogEntry(phase: .downloading, duration: dlTime, memoryAfter: snapshot(backend: backend))
+            phases.append(dlEntry)
+            onPhaseComplete?(dlEntry)
+        } else {
+            await emitPhase(.cached, onPhase)
+            let cachedEntry = PhaseLogEntry(phase: .cached, duration: 0, memoryAfter: snapshot(backend: backend))
+            phases.append(cachedEntry)
+            onPhaseComplete?(cachedEntry)
+        }
+
+        for step in stepNames {
+            // --- Load ---
+            await emitPhase(.loading, onPhase)
             let loadStart = CFAbsoluteTimeGetCurrent()
-            let prover: ProverScheme
-            let verifier: VerifierScheme
-
-            let pkpPath = await downloader.proverPath(for: step)
-            let pkvPath = await downloader.verifierPath(for: step)
-
-            if usePrecompiled,
-               backend == .provekit,
-               let pkpPath, let pkvPath {
-                onPhase?(.loading)
-                prover = try verity.loadProver(from: pkpPath)
-                verifier = try verity.loadVerifier(from: pkvPath)
-            } else {
-                onPhase?(.preparing)
-                let circuitPath = try bundlePath("\(step)_circuit", ext: "json")
-                let circuitData = try Circuit.load(from: circuitPath)
-                let scheme = try verity.prepare(circuit: circuitData)
-                prover = scheme.prover
-                verifier = scheme.verifier
+            guard let pkpPath = await downloader.proverPath(for: step),
+                  let pkvPath = await downloader.verifierPath(for: step) else {
+                throw VerityError.invalidInput("Scheme files not found for \(step)")
             }
+            let prover = try verity.loadProver(from: pkpPath)
+            let verifier = try verity.loadVerifier(from: pkvPath)
             let loadTime = CFAbsoluteTimeGetCurrent() - loadStart
-            let loadEntry = PhaseLogEntry(phase: usePrecompiled ? .loading : .preparing, duration: loadTime, memoryAfter: snapshot(backend: backend), stepName: step)
+            let loadEntry = PhaseLogEntry(phase: .loading, duration: loadTime, memoryAfter: snapshot(backend: backend), stepName: step)
             phases.append(loadEntry)
             onPhaseComplete?(loadEntry)
 
             // --- Prove ---
-            onPhase?(.proving)
+            await emitPhase(.proving, onPhase)
             let inputPath = try bundlePath("\(step)_Prover", ext: "toml")
             let witness = try Witness.load(from: inputPath)
             let proveStart = CFAbsoluteTimeGetCurrent()
-            let proof = try prover.prove(witness: witness)
+            let proof: Proof
+            do {
+                proof = try prover.prove(witness: witness)
+            } catch {
+                let msg = (try? Verity.lastErrorMessage(for: backend)) ?? "none"
+                throw VerityError.invalidInput("Step '\(step)' prove() failed: \(error) | backend msg: \(msg)")
+            }
             let proveTime = CFAbsoluteTimeGetCurrent() - proveStart
             let proveEntry = PhaseLogEntry(phase: .proving, duration: proveTime, memoryAfter: snapshot(backend: backend), stepName: step)
             phases.append(proveEntry)
             onPhaseComplete?(proveEntry)
 
             // --- Verify ---
-            onPhase?(.verifying)
+            await emitPhase(.verifying, onPhase)
             let verifyStart = CFAbsoluteTimeGetCurrent()
-            let isValid = try verifier.verify(proof: proof)
+            let isValid: Bool
+            do {
+                isValid = try verifier.verify(proof: proof)
+            } catch {
+                let msg = (try? Verity.lastErrorMessage(for: backend)) ?? "none"
+                throw VerityError.invalidInput("Step '\(step)' verify() failed: \(error) | backend msg: \(msg)")
+            }
             let verifyTime = CFAbsoluteTimeGetCurrent() - verifyStart
             let verifyEntry = PhaseLogEntry(phase: .verifying, duration: verifyTime, memoryAfter: snapshot(backend: backend), stepName: step)
             phases.append(verifyEntry)

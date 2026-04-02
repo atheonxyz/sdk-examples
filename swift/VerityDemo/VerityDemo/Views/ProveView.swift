@@ -5,8 +5,6 @@ import Verity
 struct ProveView: View {
     let circuit: DemoCircuit
 
-    @State private var selectedBackend: Backend = .provekit
-    @State private var usePrecompiled = true
     @State private var result: ProofResult?
     @State private var fragmentedResults: [StepResult]?
     @State private var isRunning = false
@@ -18,41 +16,25 @@ struct ProveView: View {
     @State private var service = VerityService()
     @ObservedObject private var downloader = SchemeDownloader.shared
 
-    private var schemesDownloaded: Bool {
-        downloader.isDownloaded(circuit)
-    }
+    private var isCached: Bool { downloader.isDownloaded(circuit) }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                // Backend picker
-                Picker("Backend", selection: $selectedBackend) {
-                    Text("ProveKit").tag(Backend.provekit)
-                    Text("Barretenberg").tag(Backend.barretenberg)
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: selectedBackend) { _ in
-                    result = nil
-                    error = nil
-                    liveLog = []
-                    currentPhase = nil
-                }
-
-                // Precompiled toggle
-                VStack(spacing: 8) {
-                    Toggle("Use Precompiled Schemes", isOn: $usePrecompiled)
-                        .font(.subheadline)
-                        .tint(.blue)
-
-                    if usePrecompiled && schemesDownloaded {
-                        HStack(spacing: 6) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                                .font(.caption)
-                            Text("Schemes cached locally")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                // Scheme status
+                HStack(spacing: 8) {
+                    if isCached {
+                        Image(systemName: "internaldrive.fill")
+                            .foregroundStyle(.green)
+                        Text("Schemes cached")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Image(systemName: "icloud.and.arrow.down")
+                            .foregroundStyle(.orange)
+                        Text("Schemes will be downloaded")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -101,21 +83,17 @@ struct ProveView: View {
             .padding()
         }
         .navigationTitle(circuit.name)
-        .onDisappear { runTask?.cancel() }
+        .onDisappear {
+            runTask?.cancel()
+            isRunning = false
+            currentPhase = nil
+        }
     }
 
     private var buttonLabel: String {
         guard isRunning else { return "Generate Proof" }
-        if let phase = currentPhase {
-            switch phase {
-            case .done: return "Starting..."
-            default: return "\(phase.rawValue)..."
-            }
-        }
-        if usePrecompiled && !schemesDownloaded {
-            return "Downloading schemes..."
-        }
-        return "Starting..."
+        guard let phase = currentPhase, phase != .done else { return "Starting..." }
+        return "\(phase.rawValue)..."
     }
 
     private func run() {
@@ -128,16 +106,10 @@ struct ProveView: View {
 
         runTask = Task {
             do {
-                // Download schemes if needed
-                if usePrecompiled && !schemesDownloaded {
-                    try await downloader.download(circuit)
-                }
-
                 if circuit.isFragmented {
                     let (steps, _, _, _) = try await service.generateAndVerifyFragmented(
                         circuit: circuit,
-                        backend: selectedBackend,
-                        usePrecompiled: usePrecompiled,
+                        backend: .provekit,
                         onPhase: { phase in
                             Task { @MainActor in currentPhase = phase }
                         },
@@ -152,8 +124,7 @@ struct ProveView: View {
                 } else {
                     let r = try await service.generateAndVerify(
                         circuit: circuit,
-                        backend: selectedBackend,
-                        usePrecompiled: usePrecompiled,
+                        backend: .provekit,
                         onPhase: { phase in
                             Task { @MainActor in currentPhase = phase }
                         },
@@ -168,7 +139,7 @@ struct ProveView: View {
                 }
             } catch {
                 os_log("[VerityDemo] ERROR: \(error)")
-                if let lastMsg = try? Verity.lastErrorMessage(for: selectedBackend) {
+                if let lastMsg = try? Verity.lastErrorMessage(for: .provekit) {
                     os_log("[VerityDemo] lastErrorMessage: \(lastMsg ?? "nil")")
                 }
                 await MainActor.run {
@@ -183,12 +154,12 @@ struct ProveView: View {
         if let ve = error as? VerityError {
             return ve.errorDescription ?? "\(ve)"
         }
+        if let de = error as? SchemeDownloadError {
+            return de.errorDescription ?? "\(de)"
+        }
         let msg = error.localizedDescription
         if msg.contains("memory") || msg.contains("alloc") {
-            return "Out of memory — try a smaller circuit or configure memory limits with Verity.configureMemory()."
-        }
-        if msg.contains("not found") || msg.contains("resource") {
-            return "Circuit file not found in bundle. Ensure all circuit assets are included."
+            return "Out of memory — try a smaller circuit."
         }
         return msg
     }

@@ -59,7 +59,9 @@ final class SchemeDownloader: ObservableObject {
         let filenames = schemeFilenames(for: circuit)
 
         for filename in filenames {
-            let remoteURL = URL(string: "\(Self.baseURL)/\(filename)")!
+            guard let remoteURL = URL(string: "\(Self.baseURL)/\(filename)") else {
+                throw SchemeDownloadError.httpError(0, filename)
+            }
             let localURL = cacheDir.appendingPathComponent(filename)
 
             // Skip if already cached

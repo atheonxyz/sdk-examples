@@ -82,7 +82,7 @@ struct FragmentedResultView: View {
                     summaryRow("Steps", "\(steps.count)")
                     summaryRow("Total Time", formatTime(totalTime))
                     summaryRow("Total Proof", formatBytes(totalProofBytes))
-                    summaryRow("Avg per step", formatTime(totalTime / Double(steps.count)))
+                    summaryRow("Avg per step", formatTime(steps.isEmpty ? 0 : totalTime / Double(steps.count)))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
