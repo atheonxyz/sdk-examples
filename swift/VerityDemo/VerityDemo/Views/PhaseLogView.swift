@@ -13,7 +13,7 @@ struct PhaseLogView: View {
                             .foregroundStyle(iconColor(for: entry.phase))
                             .font(.subheadline)
                         if let step = entry.stepName {
-                            Text("\(step) — \(entry.phase.rawValue)")
+                            Text("\(shortStep(step)) · \(entry.phase.rawValue)")
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
                         } else {
@@ -56,5 +56,13 @@ struct PhaseLogView: View {
         case .cached: return .blue
         default: return .green
         }
+    }
+
+    private func shortStep(_ name: String) -> String {
+        let steps = bundledCircuits.first?.steps ?? []
+        if let idx = steps.firstIndex(of: name) {
+            return "Step \(idx + 1)"
+        }
+        return name
     }
 }

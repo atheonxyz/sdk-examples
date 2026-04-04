@@ -30,21 +30,19 @@ actor VerityService {
         var stepResults: [StepResult] = []
         var phases: [PhaseLogEntry] = []
 
-        // --- Download or Cached ---
-        let wasCached = await downloader.isDownloaded(circuit)
-        if !wasCached {
+        // --- Wait for preload (started at app launch) or download now ---
+        if await !downloader.isDownloaded(circuit) {
             await emitPhase(.downloading, onPhase)
             let dlStart = CFAbsoluteTimeGetCurrent()
-            try await downloader.download(circuit)
+            await downloader.awaitPreload()
+            // If preload didn't cover this circuit, download directly
+            if await !downloader.isDownloaded(circuit) {
+                try await downloader.download(circuit)
+            }
             let dlTime = CFAbsoluteTimeGetCurrent() - dlStart
             let dlEntry = PhaseLogEntry(phase: .downloading, duration: dlTime, memoryAfter: snapshot(backend: backend))
             phases.append(dlEntry)
             onPhaseComplete?(dlEntry)
-        } else {
-            await emitPhase(.cached, onPhase)
-            let cachedEntry = PhaseLogEntry(phase: .cached, duration: 0, memoryAfter: snapshot(backend: backend))
-            phases.append(cachedEntry)
-            onPhaseComplete?(cachedEntry)
         }
 
         for step in circuit.steps {

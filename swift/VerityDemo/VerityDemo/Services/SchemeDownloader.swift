@@ -17,8 +17,11 @@ final class SchemeDownloader: ObservableObject {
 
     @Published private(set) var downloadedCircuits: Set<String> = []
     @Published private(set) var activeDownloads: Set<String> = []
+    @Published private(set) var preloadError: String?
 
     private let cacheDir: URL
+    /// Continuations waiting for a preload to finish.
+    private var preloadTask: Task<Void, Never>?
 
     private init() {
         let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -26,6 +29,27 @@ final class SchemeDownloader: ObservableObject {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         cacheDir = dir
         refreshState()
+    }
+
+    /// Start downloading all bundled circuit schemes in the background.
+    /// Safe to call multiple times — only the first call triggers downloads.
+    func preloadAll() {
+        guard preloadTask == nil else { return }
+        preloadTask = Task {
+            for circuit in bundledCircuits where !isDownloaded(circuit) {
+                do {
+                    try await download(circuit)
+                } catch {
+                    os_log("[SchemeDownloader] Preload failed: %{public}@", error.localizedDescription)
+                    preloadError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    /// Wait until preload finishes (no-op if already done or not started).
+    func awaitPreload() async {
+        await preloadTask?.value
     }
 
     // MARK: - Public API

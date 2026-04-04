@@ -16,27 +16,11 @@ struct ProveView: View {
     @ObservedObject private var downloader = SchemeDownloader.shared
 
     private var isCached: Bool { downloader.isDownloaded(circuit) }
+    private var isDownloading: Bool { downloader.activeDownloads.contains(circuit.filePrefix) }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                // Scheme status
-                HStack(spacing: 8) {
-                    if isCached {
-                        Image(systemName: "internaldrive.fill")
-                            .foregroundStyle(.green)
-                        Text("Schemes cached")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Image(systemName: "icloud.and.arrow.down")
-                            .foregroundStyle(.orange)
-                        Text("Schemes will be downloaded")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
                 // Action button
                 Button(action: run) {
                     HStack(spacing: 10) {

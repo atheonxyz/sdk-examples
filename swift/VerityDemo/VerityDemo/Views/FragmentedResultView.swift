@@ -98,8 +98,10 @@ struct FragmentedResultView: View {
     }
 
     private func shortName(_ name: String) -> String {
-        // t_add_dsc_720 → dsc_720
-        name.replacingOccurrences(of: "t_add_", with: "")
-            .replacingOccurrences(of: "t_", with: "")
+        let allSteps = bundledCircuits.first?.steps ?? []
+        if let idx = allSteps.firstIndex(of: name) {
+            return "Step \(idx + 1)"
+        }
+        return name
     }
 }
