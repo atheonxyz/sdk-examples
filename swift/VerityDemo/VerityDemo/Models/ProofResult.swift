@@ -8,12 +8,10 @@ struct DemoCircuit: Identifiable, Sendable {
     let name: String
     let description: String
     let filePrefix: String
-    /// For fragmented circuits: ordered list of step directory names within Resources/circuits/{filePrefix}/
-    let steps: [String]?
+    /// Ordered list of step directory names within Resources/circuits/{filePrefix}/
+    let steps: [String]
 
-    var isFragmented: Bool { steps != nil }
-
-    init(name: String, description: String, filePrefix: String, steps: [String]? = nil) {
+    init(name: String, description: String, filePrefix: String, steps: [String]) {
         self.name = name
         self.description = description
         self.filePrefix = filePrefix
@@ -22,9 +20,6 @@ struct DemoCircuit: Identifiable, Sendable {
 }
 
 let bundledCircuits = [
-    DemoCircuit(name: "Poseidon2", description: "Hash function proof — fast, small circuit", filePrefix: "poseidon2"),
-    DemoCircuit(name: "SHA-256", description: "SHA-256 hash proof — medium complexity", filePrefix: "noir_sha256"),
-    DemoCircuit(name: "Age Check", description: "Passport age verification — larger circuit", filePrefix: "complete_age_check"),
     DemoCircuit(
         name: "Age Check (Fragmented)",
         description: "4-step chained passport proof",
@@ -62,7 +57,7 @@ struct PhaseLogEntry: Identifiable, Sendable {
     let phase: ProofPhase
     let duration: TimeInterval
     let memoryAfter: MemorySnapshot
-    /// For fragmented circuits: which step this entry belongs to
+    /// Which step this entry belongs to
     let stepName: String?
 
     init(phase: ProofPhase, duration: TimeInterval, memoryAfter: MemorySnapshot, stepName: String? = nil) {
@@ -73,7 +68,7 @@ struct PhaseLogEntry: Identifiable, Sendable {
     }
 }
 
-// MARK: - Step Result (fragmented circuits)
+// MARK: - Step Result
 
 struct StepResult: Identifiable, Sendable {
     let id = UUID()
@@ -84,26 +79,6 @@ struct StepResult: Identifiable, Sendable {
     let isValid: Bool
     let proofSize: Int
     var totalTime: TimeInterval { loadTime + proveTime + verifyTime }
-}
-
-// MARK: - Proof Result
-
-struct ProofResult: Sendable {
-    let circuit: DemoCircuit
-    let backend: Backend
-    let proof: Proof
-    let loadTime: TimeInterval
-    let proveTime: TimeInterval
-    let verifyTime: TimeInterval
-    let isValid: Bool
-    let memoryBefore: MemorySnapshot
-    let memoryAfter: MemorySnapshot
-    let phases: [PhaseLogEntry]
-
-    var totalTime: TimeInterval { loadTime + proveTime + verifyTime }
-    var proofHex: String { proof.hexPreview(maxBytes: 80) }
-    var proofSize: Int { proof.size }
-    var memoryDeltaMB: Double { memoryAfter.processMemoryMB - memoryBefore.processMemoryMB }
 }
 
 // MARK: - Formatting Helpers

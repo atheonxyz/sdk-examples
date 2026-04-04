@@ -5,9 +5,9 @@ struct CircuitListView: View {
         List(bundledCircuits) { circuit in
             NavigationLink(destination: ProveView(circuit: circuit)) {
                 HStack(spacing: 12) {
-                    Image(systemName: circuit.isFragmented ? "link.circle.fill" : "lock.shield.fill")
+                    Image(systemName: "lock.shield.fill")
                         .font(.title3)
-                        .foregroundStyle(circuit.isFragmented ? .orange : .blue)
+                        .foregroundStyle(.blue)
                         .frame(width: 28)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(circuit.name)

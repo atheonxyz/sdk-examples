@@ -5,7 +5,6 @@ import Verity
 struct ProveView: View {
     let circuit: DemoCircuit
 
-    @State private var result: ProofResult?
     @State private var fragmentedResults: [StepResult]?
     @State private var isRunning = false
     @State private var error: String?
@@ -70,12 +69,7 @@ struct ProveView: View {
                     }
                 }
 
-                // Result (single circuit)
-                if let result {
-                    ResultView(result: result)
-                }
-
-                // Result (fragmented)
+                // Result
                 if let steps = fragmentedResults {
                     FragmentedResultView(steps: steps)
                 }
@@ -99,43 +93,25 @@ struct ProveView: View {
     private func run() {
         isRunning = true
         error = nil
-        result = nil
         fragmentedResults = nil
         liveLog = []
         currentPhase = nil
 
         runTask = Task {
             do {
-                if circuit.isFragmented {
-                    let (steps, _, _, _) = try await service.generateAndVerifyFragmented(
-                        circuit: circuit,
-                        backend: .provekit,
-                        onPhase: { phase in
-                            Task { @MainActor in currentPhase = phase }
-                        },
-                        onPhaseComplete: { entry in
-                            Task { @MainActor in liveLog.append(entry) }
-                        }
-                    )
-                    await MainActor.run {
-                        fragmentedResults = steps
-                        isRunning = false
+                let (steps, _, _, _) = try await service.generateAndVerifyFragmented(
+                    circuit: circuit,
+                    backend: .provekit,
+                    onPhase: { phase in
+                        Task { @MainActor in currentPhase = phase }
+                    },
+                    onPhaseComplete: { entry in
+                        Task { @MainActor in liveLog.append(entry) }
                     }
-                } else {
-                    let r = try await service.generateAndVerify(
-                        circuit: circuit,
-                        backend: .provekit,
-                        onPhase: { phase in
-                            Task { @MainActor in currentPhase = phase }
-                        },
-                        onPhaseComplete: { entry in
-                            Task { @MainActor in liveLog.append(entry) }
-                        }
-                    )
-                    await MainActor.run {
-                        result = r
-                        isRunning = false
-                    }
+                )
+                await MainActor.run {
+                    fragmentedResults = steps
+                    isRunning = false
                 }
             } catch {
                 os_log("[VerityDemo] ERROR: \(error)")

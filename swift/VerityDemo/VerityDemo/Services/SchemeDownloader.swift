@@ -10,10 +10,7 @@ final class SchemeDownloader: ObservableObject {
     // MARK: - Configuration
 
     /// Base URL where scheme files are hosted.
-    /// Each file is at: {baseURL}/{filename}  (e.g. poseidon2_prover.pkp)
-    ///
-    /// Upload .pkp/.pkv files as GitHub Release assets, then set this to:
-    ///   https://github.com/{owner}/{repo}/releases/download/{tag}
+    /// Each file is at: {baseURL}/{filename}  (e.g. t_add_dsc_720_prover.pkp)
     static let baseURL = "https://github.com/atheonxyz/sdk-examples/releases/download/schemes-v0.3.0"
 
     // MARK: - Published State
@@ -103,12 +100,9 @@ final class SchemeDownloader: ObservableObject {
     }
 
     private func schemeFilenames(for circuit: DemoCircuit) -> [String] {
-        if let steps = circuit.steps {
-            return steps.flatMap { step in
-                ["\(step)_prover.pkp", "\(step)_verifier.pkv"]
-            }
+        circuit.steps.flatMap { step in
+            ["\(step)_prover.pkp", "\(step)_verifier.pkv"]
         }
-        return ["\(circuit.filePrefix)_prover.pkp", "\(circuit.filePrefix)_verifier.pkv"]
     }
 }
 

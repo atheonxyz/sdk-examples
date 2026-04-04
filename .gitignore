@@ -51,3 +51,6 @@ build/
 *.env
 *.p12
 *.mobileprovision
+
+todo.md
+script.sh
